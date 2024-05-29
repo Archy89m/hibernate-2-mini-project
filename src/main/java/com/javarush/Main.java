@@ -7,7 +7,13 @@ import org.hibernate.SessionFactory;
 import org.hibernate.cfg.Configuration;
 import org.hibernate.cfg.Environment;
 
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.time.Year;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Properties;
+import java.util.Set;
 
 public class Main {
 
@@ -74,19 +80,127 @@ public class Main {
 
     public static void main(String[] args) {
         Main main = new Main();
+
         Customer customer = main.createCustomer();
+        main.ReturnInvToStore();
+        main.rentInventory(customer);
+        main.newMovieHasBeenReleased();
+
+    }
+
+    private void newMovieHasBeenReleased() {
+
+        try (Session session = sessionFactory.getCurrentSession()) {
+
+            session.beginTransaction();
+
+            Language language = languageDAO.getItems(0, 5).stream().findFirst().get();
+            List<Category> categories = categoryDAO.getItems(0, 5);
+            List<Actor> actors = actorDAO.getItems(0, 10);
+
+            Film film = new Film();
+            film.setLanguage(language);
+            film.setActors(new HashSet<>(actors));
+            film.setRating(Rating.PG);
+            film.setSpecialFeatures(Set.of(Feature.BEHIND_THE_SCENES, Feature.TRAILERS));
+            film.setLength((short) 123);
+            film.setReplacementCost(BigDecimal.TEN);
+            film.setRentalRate(BigDecimal.ONE);
+            film.setDescription("This is a film");
+            film.setTitle("The planet of Apes");
+            film.setRentalDuration((byte) 44);
+            film.setOriginalLanguage(language);
+            film.setCategories(new HashSet<>(categories));
+            film.setYear(Year.now());
+            filmDAO.save(film);
+
+            FilmText filmText = new FilmText();
+            filmText.setId(film.getId());
+            filmText.setFilm(film);
+            filmText.setDescription("This is a film");
+            filmText.setTitle("The planet of Apes");
+            filmTextDAO.save(filmText);
+
+            session.getTransaction().commit();
+        }
+    }
+
+    private void rentInventory(Customer customer) {
+        try (Session session = sessionFactory.getCurrentSession()){
+
+            session.beginTransaction();
+
+            Film film = filmDAO.getFirstAvailableFilmForRent();
+            Store store = storeDAO.getItems(0,1).get(0);
+
+            Inventory inventory = new Inventory();
+            inventory.setFilm(film);
+            inventory.setStore(store);
+            inventoryDAO.save(inventory);
+
+            Staff staff = store.getStaff();
+
+            Rental rental = new Rental();
+            rental.setRentalDate(LocalDateTime.now());
+            rental.setCustomer(customer);
+            rental.setInventory(inventory);
+            rental.setStaff(staff);
+            rentalDAO.save(rental);
+
+            Payment payment = new Payment();
+            payment.setRental(rental);
+            payment.setCustomer(customer);
+            payment.setPaymentDate(LocalDateTime.now());
+            payment.setAmount(BigDecimal.valueOf(33.12));
+            payment.setStaff(staff);
+            paymentDAO.save(payment);
+
+            session.getTransaction().commit();
+        }
     }
 
     public Customer createCustomer() {
         try (Session session = sessionFactory.getCurrentSession()){
+
             session.beginTransaction();
 
+            Store store = storeDAO.getItems(0,1).get(0);
+            City city = cityDAO.getByName("Abu Dhabi");
 
+            Address address = new Address();
+            address.setAddress("New street");
+            address.setPhone("+12345678910");
+            address.setCity(city);
+            address.setDistrict("New district");
+            addressDAO.save(address);
 
+            Customer customer = new Customer();
+            customer.setFirstName("Mark");
+            customer.setLastName("Zuckerberg");
+            customer.setActive(true);
+            customer.setEmail("123@gmail.com");
+            customer.setAddress(address);
+            customer.setStore(store);
+            customerDAO.save(customer);
 
             session.getTransaction().commit();
 
+            return customer;
+        }
+    }
 
+    private void ReturnInvToStore() {
+
+        try (Session session = sessionFactory.getCurrentSession()){
+
+            session.beginTransaction();
+
+            Rental rental = rentalDAO.getUnreturnedRental();
+            rental.setReturnDate(LocalDateTime.now());
+
+            rentalDAO.save(rental);
+
+            session.getTransaction().commit();
         }
     }
 }
